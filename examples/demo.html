@@ -1,0 +1,485 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Nomland Demo</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+    <style type="text/tailwindcss">
+      button {
+        @apply bg-amber-700 hover:bg-amber-900 text-white font-bold px-2 rounded;
+      }
+      code {
+        counter-reset: step;
+        counter-increment: step 0;
+      }
+
+      code .line::before {
+        content: counter(step);
+        counter-increment: step;
+        width: 1rem;
+        margin-right: 1.5rem;
+        display: inline-block;
+        text-align: right;
+        color: rgba(115, 138, 148, 0.4);
+      }
+    </style>
+  </head>
+
+  <body class="bg-amber-lightest font-mono">
+    <div id="root" class="container mx-auto m-5 md:prose-lg">
+      <div id="loading">Loading...</div>
+    </div>
+
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/shiki"></script>
+
+    <script type="text/babel" data-type="module" id="main-script">
+      /** @jsx h */
+      import { h, render } from 'https://esm.sh/preact@10';
+      import { useState } from 'https://esm.sh/preact@10/hooks';
+      import { ethers } from 'https://esm.sh/ethers@5';
+
+      console.log('all deps imported');
+
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const signer = provider.getSigner();
+
+      const BACKEND_ADDR = './auth';
+
+      function UpdateInfo() {
+        return (
+          <div>
+            <p>Last updated: 2023-01-16</p>
+          </div>
+        );
+      }
+
+      function Demo() {
+        async function getChallenge({ address, domain, uri, statement }) {
+          const { message } = await fetch(`${BACKEND_ADDR}/challenge`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ address, domain, uri, statement }),
+          }).then((res) => {
+            if (res.ok) {
+              return res.json();
+            } else {
+              throw new Error('failed to get challenge');
+            }
+          });
+
+          console.log('got challenge message from api', message);
+
+          return message;
+        }
+
+        async function signin(message, signature) {
+          const { token } = await fetch(`${BACKEND_ADDR}/signin`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message, signature }),
+          }).then((res) => {
+            if (res.ok) {
+              return res.json();
+            } else {
+              throw new Error('failed to get challenge');
+            }
+          });
+
+          console.log('login response', { token });
+
+          localStorage.setItem('siwe:token', token);
+
+          return token;
+        }
+
+        async function getAccount() {
+          const token = localStorage.getItem('siwe:token');
+          const res = await fetch(`${BACKEND_ADDR}/account`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }).then((res) => {
+            if (res.ok) {
+              return res.json();
+            } else {
+              throw new Error('failed to get challenge');
+            }
+          });
+
+          return res;
+        }
+
+        const mockCuration = {
+          curation: {
+            curator: {
+              platform: 'General',
+              handle: 'PUT YOUR WALLET ADDRESS HERE',
+            },
+            community: {
+              platform: 'General',
+              handle: 'coffee_addicts',
+            },
+            lists: ['general'],
+            reason: {
+              comment: 'I love coffee',
+              tagSuggestions: ['coffee', 'addict'],
+            },
+          },
+          url: 'https://www.bestcoffee.guide/',
+        };
+
+   
+
+        async function processCuration(mockCuration) {
+          const token = localStorage.getItem('siwe:token');
+          if (mockCuration.curation.curator.handle)
+            mockCuration.curation.curator.handle = await signer.getAddress();
+          const res = await fetch(`./nom/processCuration`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            method: 'POST',
+            body: JSON.stringify(mockCuration),
+          }).then((res) => {
+            if (res.ok) {
+              return res.json();
+            } else {
+              throw new Error('Failed to process curation.');
+            }
+          });
+          return res;
+        }
+
+        const mockCommunity = {
+          community: '57762',
+        };
+        async function getLs() {
+          const token = localStorage.getItem('siwe:token');
+
+          const res = await fetch(`./nom/ls`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            method: 'POST',
+            body: JSON.stringify(mockCommunity),
+          }).then((res) => {
+            if (res.ok) {
+              return res.json();
+            } else {
+              throw new Error('failed to get ls');
+            }
+          });
+
+          return res;
+        }
+
+        const [connectStatus, setConnectStatus] = useState('Connect wallet');
+        function connectWallet() {
+          console.log('requesting account access...');
+          setConnectStatus('⏳ Please approve in your wallet...');
+          provider
+            .send('eth_requestAccounts', [])
+            .then(() => {
+              console.log('user approved request');
+              setConnectStatus('✅ Connected');
+            })
+            .catch(() => {
+              console.log('user rejected request');
+            });
+        }
+
+        const [signInStatus, setSignInStatus] = useState('SIWE');
+        async function signIn() {
+          console.log(
+            'requesting signature; please approve the request in your wallet...',
+          );
+
+          setSignInStatus('⏳ Please approve in your wallet...');
+
+          const message = await getChallenge({
+            address: await signer.getAddress(),
+            domain: window.location.hostname,
+            uri: window.location.href,
+            statement: 'Sign in with Ethereum to the app.',
+          }).catch((err) => {
+            console.log('error', err);
+            setSignInStatus('❌ Failed to sign in. Click to try again.');
+            throw err;
+          });
+
+          const signature = await signer
+            .signMessage(message)
+            .then((res) => {
+              console.log('signature', res);
+              setSignInStatus('✅ Signed');
+              return res;
+            })
+            .catch((err) => {
+              console.log('error', err);
+              setSignInStatus('❌ Failed to sign in. Click to try again.');
+              throw err;
+            });
+
+          setSignInStatus('Signing in...');
+          const token = await signin(message, signature);
+
+          console.log('Signed in', { token });
+
+          setSignInStatus('✅ Signed in');
+        }
+
+        const [getInfoStatus, setGetInfoStatus] = useState('Get account info');
+        async function getInformation() {
+          setGetInfoStatus('Getting account info...');
+
+          const res = await getAccount();
+
+          console.log('get information response', res);
+
+          setGetInfoStatus(`✅ Got account info: ${res.address}`);
+        }
+
+        const [getCuratorId, setCuratorId] = useState('PUT YOUR CHARACTER ID HERE');
+        const [getCommunityId, setCommunityId] = useState('PUT YOUR COMMUNITY ID HERE');
+        const mockCuration2 = {
+          curation: {
+            curator: getCuratorId,
+            community: getCommunityId,
+            lists: ['general'],
+            reason: {
+              comment: 'I love coffee',
+              tagSuggestions: ['coffee', 'addict'],
+            },
+          },
+          url: 'https://www.bestcoffee.guide/',
+        };
+        async function curate() {
+          const res = await processCuration(mockCuration);
+          setCuratorId(res.curatorId)
+          setCommunityId(res.cid)
+          
+          console.log('scenario 1 processCuration response', res)
+        }
+
+        async function curate2() {
+          const res = await processCuration(mockCuration2);
+          console.log('scenario 2 processCuration response', res)
+
+        }
+
+        async function ls() {
+          setGetInfoStatus('Getting session info...');
+
+          const res = await getLs();
+
+          console.log('get information response', res);
+
+          setGetInfoStatus(`✅ Got session info: ${res.address}`);
+        }
+
+        const [signOutStatus, setSignOutStatus] = useState('Sign out');
+        async function signOut() {
+          setSignOutStatus('Signing out...');
+
+          localStorage.removeItem('siwe:token');
+
+          setSignOutStatus('✅ Signed out');
+          setConnectStatus('Connect wallet');
+          setSignInStatus('Sign-in with Crossbell (or Ethereum)');
+          setGetInfoStatus('Get account info');
+          setSignOutStatus('Sign out');
+        }
+
+        return (
+          <div>
+            <p>This is a demo showing how to interact with Nomland backend.</p>
+            <p>
+              Please use the <a href="https://metamask.io">MetaMask</a> to
+              interact.
+            </p>
+            <p>
+              Please open the browser console to see the results of all protocol
+              interactions.
+            </p>
+
+            <h3> Setup </h3>
+            <p>
+              Step 1: <button onClick={connectWallet}>{connectStatus}</button>
+            </p>
+            <p>
+              Step 2: <button onClick={signIn}>{signInStatus}</button>
+            </p>
+            <p>
+              Step 3: <button onClick={getInformation}>{getInfoStatus}</button>
+            </p>
+            <h3> Protocol Interactions </h3>
+            <h4>POST /processCuration:</h4>
+            <p>
+              body param:{' '}
+              <div class="language-typescript">
+                {`interface ProcessCurationBody {
+    curation: Curation,
+    url: string,
+}
+interface RawCuration {
+    content: string;
+    sources: string[];
+    date_published: string;
+    external_url?: string;
+}
+interface Curation {
+    curator: Accountish;
+    community: Accountish;
+    lists: string[];
+    reason: CurationReason;
+    raw?: RawCuration;
+}
+type Accountish = Account | Numberish;
+interface Account {
+    platform: "Discord" | "Telegram" | "General";
+    handle: string;
+    guildId?: string;
+    nickname?: string;
+    avatar?: string;
+    banner?: string;
+    dao?: boolean;
+    variant?: string;
+}
+type Numberish = bigint | number | string;
+`}
+              </div>
+            </p>
+            <h4>Secenario 1</h4>
+            <p>
+              You can directly create a new character for the user. That
+              character will be kept under admin. But be sure to use the wallet
+              address as handle field.
+              <div class="language-typescript">
+                {JSON.stringify(mockCuration, null, '\t').replaceAll(
+                  '],\n\t"',
+                  '],\n\n\t"',
+                )}{' '}
+              </div>
+              <button onClick={curate}>processCuration</button>
+            </p>
+
+            <h4>Secenario 2</h4>
+            <p>
+              Or if you already know the corresponding user's character id, you
+              could directly pass the curator id(or community id):
+            </p>
+            <div class="language-typescript">
+              {JSON.stringify(mockCuration2, null, '\t').replaceAll(
+                '],\n\t"',
+                '],\n\n\t"',
+              )}{' '}
+            </div>
+            <button onClick={curate2}>processCuration</button>
+
+            <h4>Secenario 3</h4>
+            <p>
+              Or you want to use the character generated by the user self, you
+              could also pass the curator id. But be sure to ask the user to
+              grant the operator permission to the admin first.
+            </p>
+            <p>
+              To do this, you need to call the{' '}
+              <code>operator.grantForCharacterr</code> method on the Operator
+              contract using library like{' '}
+              <a href="https://npm.im/crossbell">crossbell.js</a>:
+            </p>
+            <div class="language-typescript">
+              {`const permissions = [
+  "POST_NOTE_FOR_NOTE",
+  "POST_NOTE_FOR_CHARACTER",
+  "POST_NOTE",
+  "LINK_NOTE",
+  "LINK_CHARACTER",
+]
+const c = new Contract(provider);
+c.operator.grantForCharacter({
+    characterId: 10,
+    operator: "0xAdminAddress",
+    permissions,
+})`}
+            </div>
+            <h4>POST /ls</h4>
+            <p>
+              body param:{' '}
+              <div class="language-typescript">
+                {`interface lsBody{
+  community: string;
+}`}
+              </div>
+              {JSON.stringify(mockCommunity, null, '\t').replaceAll(
+                '],\n\t"',
+                '],\n\n\t"',
+              )}{' '}
+            </p>
+            <p>
+              <button onClick={ls}>ls</button>
+            </p>
+            <h4> Clean up </h4>
+            <p>
+              <button
+                onClick={signOut}
+                disabled={!localStorage.getItem('siwe:token')}
+              >
+                {signOutStatus}
+              </button>
+            </p>
+          </div>
+        );
+      }
+
+      function Notice() {
+        return (
+          <div>
+            <h2>Notice</h2>
+            <p>
+              You need to set up the admin key in the backend <code>.env</code>{' '}
+              and also keep an amount of $CSB in the admin account.
+            </p>
+          </div>
+        );
+      }
+
+      function App() {
+        return (
+          <div>
+            <h1>Nomland Backend</h1>
+            <hr />
+            <Demo />
+            <hr />
+            <Notice />
+          </div>
+        );
+      }
+
+      render(
+        <App />,
+        document.getElementById('root'),
+        document.getElementById('loading'),
+      );
+
+      const highlight = async () => {
+        const tss = document.getElementsByClassName('language-typescript');
+        const jsons = document.getElementsByClassName('language-json');
+        const highlighter = await shiki.getHighlighter({
+          theme: 'nord',
+          langs: ['typescript', 'json'],
+        });
+        [...tss].forEach((ts) => {
+          const html = highlighter.codeToHtml(ts.textContent, 'typescript');
+          ts.outerHTML = html;
+        });
+        [...jsons].forEach((json) => {
+          const html = highlighter.codeToHtml(json.textContent, 'json');
+          json.outerHTML = html;
+        });
+      };
+      highlight();
+    </script>
+  </body>
+</html>
