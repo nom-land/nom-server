@@ -34,8 +34,12 @@ export class NomService {
   }
 
   async ls(community: string) {
-    const { count, listNames } = await this.#nomland.ls(community);
-    return { count, listNames };
+    const { count, list } = await this.#nomland.ls(community);
+    return { count, list };
+  }
+
+  async lsById(listId: any) {
+    return await this.#nomland.lsById(listId);
   }
 
   async balanceOf(addr: string) {

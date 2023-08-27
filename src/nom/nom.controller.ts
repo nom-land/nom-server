@@ -55,6 +55,15 @@ export class NomController {
     return await this.nomService.ls(community);
   }
 
+  @Get('/ls/:listId')
+  async lsById(@Param('listId') listId: any, @Request() req: any) {
+    console.log(listId);
+    const data = await this.nomService.lsById(listId);
+    return JSON.stringify(data, (_, v) =>
+      typeof v === 'bigint' ? v.toString() : v,
+    );
+  }
+
   @Get('/balanceOf/:addr')
   async balanceOf(@Param('addr') addr: string) {
     console.log(addr);

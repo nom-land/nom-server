@@ -127,8 +127,6 @@
           url: 'https://www.bestcoffee.guide/',
         };
 
-   
-
         async function processCuration(mockCuration) {
           const token = localStorage.getItem('siwe:token');
           if (mockCuration.curation.curator.handle)
@@ -168,6 +166,18 @@
               return res.json();
             } else {
               throw new Error('failed to get ls');
+            }
+          });
+
+          return res;
+        }
+
+        async function getLsById(id) {
+          const res = await fetch(`./nom/ls/${id}`).then((res) => {
+            if (res.ok) {
+              return res.json();
+            } else {
+              throw new Error('failed to get ls/id');
             }
           });
 
@@ -240,8 +250,12 @@
           setGetInfoStatus(`✅ Got account info: ${res.address}`);
         }
 
-        const [getCuratorId, setCuratorId] = useState('PUT YOUR CHARACTER ID HERE');
-        const [getCommunityId, setCommunityId] = useState('PUT YOUR COMMUNITY ID HERE');
+        const [getCuratorId, setCuratorId] = useState(
+          'PUT YOUR CHARACTER ID HERE',
+        );
+        const [getCommunityId, setCommunityId] = useState(
+          'PUT YOUR COMMUNITY ID HERE',
+        );
         const mockCuration2 = {
           curation: {
             curator: getCuratorId,
@@ -256,26 +270,25 @@
         };
         async function curate() {
           const res = await processCuration(mockCuration);
-          setCuratorId(res.curatorId)
-          setCommunityId(res.cid)
-          
-          console.log('scenario 1 processCuration response', res)
+          setCuratorId(res.curatorId);
+          setCommunityId(res.cid);
+
+          console.log('scenario 1 processCuration response', res);
         }
 
         async function curate2() {
           const res = await processCuration(mockCuration2);
-          console.log('scenario 2 processCuration response', res)
-
+          console.log('scenario 2 processCuration response', res);
         }
 
         async function ls() {
-          setGetInfoStatus('Getting session info...');
-
           const res = await getLs();
+          console.log('ls response', res);
+        }
 
-          console.log('get information response', res);
-
-          setGetInfoStatus(`✅ Got session info: ${res.address}`);
+        async function lsById(id) {
+          const res = await getLsById(id);
+          console.log('lsById response', res);
         }
 
         const [signOutStatus, setSignOutStatus] = useState('Sign out');
@@ -405,6 +418,7 @@ c.operator.grantForCharacter({
 })`}
             </div>
             <h4>POST /ls</h4>
+            <p>Note: response of this API is just experimental. Interface may change in the future. </p>
             <p>
               body param:{' '}
               <div class="language-typescript">
@@ -419,6 +433,19 @@ c.operator.grantForCharacter({
             </p>
             <p>
               <button onClick={ls}>ls</button>
+            </p>
+            <h4>GET /ls/:listId</h4>
+            <p>Note: response of this API is just experimental. Interface may change in the future. </p>
+            <p>
+              param: <div class="language-typescript">{`listId: string;`}</div>
+            </p>
+            <p>
+              <p>
+                <button onClick={() => lsById(7925)}>/ls/7925</button>
+              </p>
+              <p>
+                <button onClick={() => lsById(7913)}>/ls/7913</button>
+              </p>
             </p>
             <h4> Clean up </h4>
             <p>
